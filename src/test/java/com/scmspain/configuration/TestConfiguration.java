@@ -1,6 +1,7 @@
 package com.scmspain.configuration;
 
 import com.scmspain.MsFcTechTestApplication;
+import com.scmspain.TweetsCleaner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
@@ -14,5 +15,10 @@ public class TestConfiguration {
     @Bean
     public MBeanExporter mockExporter() {
         return mock(MBeanExporter.class);
+    }
+
+    @Bean
+    public TweetsCleaner tweetsCleaner() {
+        return new TweetsCleaner();
     }
 }

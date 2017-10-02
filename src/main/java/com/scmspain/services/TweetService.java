@@ -9,6 +9,7 @@ import javax.persistence.EntityManager;
 import javax.persistence.TypedQuery;
 import javax.transaction.Transactional;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 
 @Service
@@ -33,7 +34,7 @@ public class TweetService {
             Tweet tweet = new Tweet();
             tweet.setTweet(text);
             tweet.setPublisher(publisher);
-
+            tweet.setPublicationDate(new Date());
             this.metricWriter.increment(new Delta<Number>("published-tweets", 1));
             this.entityManager.persist(tweet);
         } else {
@@ -58,11 +59,42 @@ public class TweetService {
     public List<Tweet> listAllTweets() {
         List<Tweet> result = new ArrayList<Tweet>();
         this.metricWriter.increment(new Delta<Number>("times-queried-tweets", 1));
-        TypedQuery<Long> query = this.entityManager.createQuery("SELECT id FROM Tweet AS tweetId WHERE pre2015MigrationStatus<>99 ORDER BY id DESC", Long.class);
+        TypedQuery<Long> query = this.entityManager
+                .createQuery("SELECT id FROM Tweet AS tweetId WHERE pre2015MigrationStatus<>99 and discarded=false ORDER BY publicationDate DESC", Long.class);
+        // No acabo de entender porque se recuperan los TWEETS de uno en uno. Esto ejecuta n+1 queries siendo n
+        // el número de tweets. Obviamente, también se deberían de limitar el número de tweets a recuperar.
+        // Bajo mi punto de vista se debería de refactorizar y recuperar todos los Tweets de una sola vez, tal
+        // y como hago en el método listDiscardedTweets.
         List<Long> ids = query.getResultList();
         for (Long id : ids) {
             result.add(getTweet(id));
         }
         return result;
+    }
+
+    public List<Tweet> listDiscardedTweets() {
+        this.metricWriter.increment(new Delta<Number>("times-queried-discardedTweets", 1));
+        try {
+            TypedQuery<Tweet> query = this.entityManager
+                    .createQuery("SELECT t FROM Tweet t WHERE t.pre2015MigrationStatus<>99 and t.discarded=true ORDER BY t.discardedDate DESC", Tweet.class);
+            return query.getResultList();
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw (RuntimeException) e;
+        }
+
+    }
+
+    public void discardTweeet(Long id) {
+        if (id == null) {
+            throw new UnkownTweetException(id);
+        }
+        Tweet tweet = entityManager.find(Tweet.class, id);
+        if(tweet == null) {
+            throw new UnkownTweetException(id);
+        }
+        this.metricWriter.increment(new Delta<Number>("discarded-tweets", 1));
+        tweet.setDiscardedDate(new Date());
+        tweet.setDiscarded(true);
     }
 }
